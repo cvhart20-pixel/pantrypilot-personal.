@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f8fafc"><title>PantryPilot Personal</title><script src="https://cdn.tailwindcss.com"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head><body class="m-0 bg-slate-50">
+<div id="authShell" class="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+  <div class="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-xl">
+    <div class="text-xs font-black tracking-[.18em] uppercase text-slate-500">PantryPilot Cloud</div>
+    <h1 class="text-3xl font-black text-slate-900 mt-2">Your pantry, synced.</h1>
+    <p class="text-slate-600 mt-2">Sign in to access your pantry, or create a new account.</p>
+    <div class="grid grid-cols-2 gap-2 mt-5">
+      <button id="showSignIn" type="button" class="min-h-11 rounded-xl bg-slate-900 text-white font-bold">Sign In</button>
+      <button id="showSignUp" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white font-bold">Create Account</button>
+    </div>
+    <form id="authForm" class="space-y-3 mt-5">
+      <input id="authEmail" type="email" autocomplete="email" required placeholder="Email address" class="w-full min-h-11 rounded-xl border border-slate-300 px-3 text-base">
+      <input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="Password (8+ characters)" class="w-full min-h-11 rounded-xl border border-slate-300 px-3 text-base">
+      <button id="authSubmit" type="submit" class="w-full min-h-11 rounded-xl bg-slate-900 text-white font-bold">Sign In</button>
+    </form>
+    <button id="magicLinkBtn" type="button" class="w-full min-h-11 mt-3 rounded-xl border border-slate-300 bg-white font-bold">Email Me a Magic Link</button>
+    <div id="authMsg" class="mt-4 text-sm font-bold text-slate-600" aria-live="polite"></div>
+  </div>
+</div>
+<div id="pantry-app" class="hidden min-h-[700px] bg-slate-50 text-slate-900 p-4 sm:p-6">
+  <style>
+    #pantry-app .card{background:#fff;border:1px solid #e2e8f0;border-radius:18px}
+    #pantry-app .pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700}
+    #pantry-app .good{background:#dcfce7;color:#166534}.soon{background:#fef3c7;color:#92400e}.expired{background:#fee2e2;color:#991b1b}
+    #pantry-app button:focus,#pantry-app input:focus,#pantry-app select:focus{outline:3px solid rgba(37,99,235,.25);outline-offset:2px}
+  </style>
+
+  <div class="max-w-6xl mx-auto space-y-5">
+    <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div>
+        <div class="text-sm font-bold tracking-[.18em] uppercase text-slate-500">Inventory + Expiration Manager · v19</div>
+        <h2 id="appTitle" class="text-3xl sm:text-4xl font-black mt-1">PantryPilot Personal</h2>
+        <p id="ownerLine" class="text-slate-600 mt-2 max-w-2xl">Your personal pantry inventory — know what you have, where it is, and what needs to be used first.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="backupBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Save Backup</button>
+        <label class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold inline-flex items-center cursor-pointer">Restore Backup<input id="restoreInput" type="file" accept="application/json,.json" class="sr-only"></label>
+        <button id="locationsBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Manage Locations</button>
+        <button id="customizeBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Customize Name</button>
+        <button id="addBtn" type="button" class="min-h-11 rounded-xl bg-slate-900 text-white px-5 font-bold">+ Add Item</button>
+      </div>
+    </header>
+
+    <section id="customizeCard" class="card p-4 sm:p-5 hidden">
+      <div class="flex justify-between items-center gap-3 mb-4">
+        <div>
+          <h3 class="font-black text-xl">Customize PantryPilot</h3>
+          <p class="text-sm text-slate-500 mt-1">Use a family name, person, household, organization, or location.</p>
+        </div>
+        <button id="closeCustomize" type="button" class="min-h-11 px-3 rounded-lg border border-slate-300">Close</button>
+      </div>
+      <form id="customizeForm" class="grid md:grid-cols-[1fr_auto] gap-3 items-end">
+        <label class="text-sm font-bold">Display Name
+          <input id="displayName" maxlength="60" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base" placeholder="The Johnson Family">
+        </label>
+        <button type="submit" class="min-h-11 rounded-xl bg-blue-700 text-white px-5 font-bold">Save Name</button>
+      </form>
+      <div id="customizeMsg" class="text-sm mt-3 text-slate-600" aria-live="polite"></div>
+    </section>
+
+    <section id="locationsCard" class="card p-4 sm:p-5 hidden">
+      <div class="flex justify-between items-center gap-3 mb-4">
+        <div><h3 class="font-black text-xl">Pantry & Storage Locations</h3><p class="text-sm text-slate-500 mt-1">Create the places where food is stored.</p></div>
+        <button id="closeLocations" type="button" class="min-h-11 px-3 rounded-lg border border-slate-300">Close</button>
+      </div>
+      <form id="locationForm" class="flex flex-col sm:flex-row gap-3">
+        <label class="text-sm font-bold flex-1">New Location
+          <input id="newLocation" required maxlength="50" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base" placeholder="Freezer, Basement, Emergency Storage…">
+        </label>
+        <button type="submit" class="sm:self-end min-h-11 rounded-xl bg-blue-700 text-white px-5 font-bold">Add Location</button>
+      </form>
+      <div id="locationList" class="flex flex-wrap gap-2 mt-4"></div>
+      <div id="locationMsg" class="text-sm mt-3 text-slate-600" aria-live="polite"></div>
+    </section>
+
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Inventory summary">
+      <div class="card p-4"><div class="text-sm text-slate-500">Total Items</div><div id="totalCount" class="text-3xl font-black mt-1">0</div></div>
+      <div class="card p-4"><div class="text-sm text-slate-500">Expiring Soon</div><div id="soonCount" class="text-3xl font-black mt-1">0</div></div>
+      <div class="card p-4"><div class="text-sm text-slate-500">Expired</div><div id="expiredCount" class="text-3xl font-black mt-1">0</div></div>
+      <div class="card p-4"><div class="text-sm text-slate-500">Locations</div><div id="locationCount" class="text-3xl font-black mt-1">0</div></div>
+    </section>
+
+    <section id="formCard" class="card p-4 sm:p-5 hidden">
+      <div class="flex justify-between items-center gap-3 mb-4">
+        <h3 id="formTitle" class="font-black text-xl">Add Pantry Item</h3>
+        <button id="closeForm" type="button" class="min-h-11 px-3 rounded-lg border border-slate-300">Close</button>
+      </div>
+      <form id="itemForm" class="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <label class="text-sm font-bold">Item
+          <input id="itemName" required maxlength="80" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base" placeholder="Canned green beans">
+        </label>
+        <label class="text-sm font-bold md:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-3">Barcode / UPC — Scan with phone
+          <div class="mt-2 flex gap-2"><input id="barcode" inputmode="numeric" maxlength="32" class="min-w-0 flex-1 min-h-11 border border-slate-300 bg-white rounded-xl px-3 text-base" placeholder="Scan or enter barcode"><button id="scanBarcodeBtn" type="button" class="min-h-11 rounded-xl bg-blue-700 text-white px-5 font-bold">Scan Barcode</button></div>
+        </label>
+        <label class="text-sm font-bold">Pantry / Location
+          <select id="location" required class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base"></select>
+        </label>
+        <label class="text-sm font-bold">Quantity
+          <input id="quantity" required type="number" min="1" max="9999" value="1" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base">
+        </label>
+        <label class="text-sm font-bold">Expiration Date
+          <input id="expiration" required type="date" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base">
+          <div class="mt-2 flex flex-wrap gap-2" aria-label="Quick expiration date choices">
+            <button type="button" data-expiry-days="7" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+7 days</button>
+            <button type="button" data-expiry-days="30" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+30 days</button>
+            <button type="button" data-expiry-days="90" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+90 days</button>
+            <button type="button" data-expiry-months="6" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+6 months</button>
+            <button type="button" data-expiry-years="1" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+1 year</button>
+            <button type="button" data-expiry-years="2" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+2 years</button>
+            <button type="button" data-expiry-years="3" class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">+3 years</button>
+          </div>
+        </label>
+        <label class="text-sm font-bold">Low-stock alert at
+          <input id="lowAt" required type="number" min="0" max="9999" value="1" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base">
+        </label>
+        <label class="text-sm font-bold md:col-span-2">Notes
+          <input id="notes" maxlength="120" class="mt-1 w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base" placeholder="Optional size, flavor, meal plan note…">
+        </label>
+        <div class="flex items-end gap-2"><button id="saveItemBtn" type="submit" class="w-full min-h-11 rounded-xl bg-blue-700 text-white font-bold">Save Item</button><button id="cancelEditBtn" type="button" class="hidden min-h-11 rounded-xl border border-slate-300 px-4 font-bold">Cancel</button></div>
+      </form>
+      <div id="scannerPanel" class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div class="flex items-center justify-between gap-3 mb-3"><div><div class="font-black">Scan Barcode</div><p class="text-sm text-slate-500">Point your phone camera at a UPC or EAN barcode.</p></div><button id="stopScannerBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Stop</button></div>
+        <video id="scannerVideo" playsinline muted class="w-full max-h-[340px] rounded-xl bg-black object-cover"></video>
+        <div id="scannerMsg" class="text-sm mt-3 text-slate-600" aria-live="polite">Camera is off.</div>
+        <div id="scanReview" class="hidden mt-3 rounded-xl border border-slate-300 bg-white p-3">
+          <div class="text-sm text-slate-500">Detected barcode</div>
+          <div id="scanReviewCode" class="mt-1 font-mono text-xl font-black tracking-wide"></div>
+          <p class="text-sm text-slate-600 mt-2">Compare this number with the digits printed under the barcode.</p>
+          <div class="flex flex-wrap gap-2 mt-3"><button id="useScannedCodeBtn" type="button" class="min-h-11 rounded-xl bg-blue-700 text-white px-4 font-bold">Use This Code</button><button id="scanAgainBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Scan Again</button></div>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">On supported phones and browsers, Scan uses the camera to read common UPC/EAN barcodes. Manual barcode entry remains available as a fallback.</p>
+      <div id="formMsg" class="text-sm mt-3 text-red-700" aria-live="polite"></div>
+    </section>
+
+    <section class="card p-4 sm:p-5">
+      <div class="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+        <div class="flex-1">
+          <label class="sr-only" for="search">Search inventory</label>
+          <input id="search" class="w-full min-h-11 border border-slate-300 rounded-xl px-3 text-base" placeholder="Search food or location…">
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <select id="locationFilter" class="min-h-11 border border-slate-300 rounded-xl px-3 text-base"><option value="all">All pantries</option></select>
+          <select id="statusFilter" class="min-h-11 border border-slate-300 rounded-xl px-3 text-base">
+            <option value="all">All expiration</option><option value="soon">Expiring soon</option><option value="expired">Expired</option><option value="good">Good</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-5 overflow-x-auto">
+        <table class="w-full min-w-[840px] text-left">
+          <thead><tr class="border-b border-slate-200 text-sm text-slate-500"><th class="py-3 pr-3">Item</th><th class="py-3 pr-3">Barcode</th><th class="py-3 pr-3">Location</th><th class="py-3 pr-3">Qty</th><th class="py-3 pr-3">Expires</th><th class="py-3 pr-3">Status</th><th class="py-3">Actions</th></tr></thead>
+          <tbody id="inventoryBody"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="hidden text-center text-slate-500 py-10">No inventory matches your filters.</div>
+    </section>
+
+    <section id="expirationAlerts" class="card p-5 border-2 border-amber-200">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div><h3 class="font-black text-lg">Expiration Alerts</h3><p class="text-sm text-slate-500 mt-1">What needs your attention right now.</p></div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div id="alertSummary" class="text-sm font-bold text-slate-700"></div>
+          <button id="notifyBtn" type="button" class="min-h-11 px-3 rounded-lg border border-slate-300 bg-white text-sm font-bold">Enable Alerts</button>
+        </div>
+      </div>
+      <div id="notifyMsg" class="text-xs text-slate-500 mt-2" aria-live="polite">Browser alerts can remind you when you open PantryPilot. Background push reminders will come with the future cloud/PWA version.</div>
+      <div id="alertList" class="mt-4 space-y-2"></div>
+    </section>
+
+    <section class="grid md:grid-cols-2 gap-4">
+      <div class="card p-5">
+        <h3 class="font-black text-lg">Use First</h3>
+        <p class="text-sm text-slate-500 mt-1">Items closest to expiration.</p>
+        <div id="useFirst" class="mt-4 space-y-3"></div>
+      </div>
+      <div class="card p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-black text-lg">Shopping List</h3><p class="text-sm text-slate-500 mt-1">Low-stock suggestions plus anything you add manually.</p></div><button id="clearShopping" type="button" class="min-h-11 px-4 rounded-lg border border-slate-300 bg-white text-sm font-bold">Clear List</button></div>
+        <form id="shoppingForm" class="flex flex-col sm:flex-row gap-2 mt-4">
+          <input id="shoppingInput" maxlength="80" class="min-w-0 flex-1 min-h-11 border border-slate-300 rounded-xl px-3 text-base" placeholder="Add milk, flour, snacks…">
+          <button id="shoppingAddBtn" type="submit" class="min-h-11 rounded-xl bg-slate-900 text-white px-5 font-bold">Add to List</button>
+        </form>
+        <div id="shoppingMsg" class="text-sm font-bold text-slate-600 mt-2" aria-live="polite"></div>
+        <div id="shoppingList" class="mt-4 space-y-2"></div>
+        <div class="mt-6 pt-5 border-t border-slate-200">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div><h4 class="font-black text-base">Saved for Later</h4><p class="text-sm text-slate-500 mt-1">Low-stock items you chose not to shop for yet.</p></div>
+            <span id="savedLaterCount" class="text-xs font-bold text-slate-500"></span>
+          </div>
+          <div id="savedLaterList" class="mt-3 space-y-2"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  (()=>{
+    const root=document.getElementById('pantry-app'); if(root.dataset.ready) return; root.dataset.ready='1';
+    const $=s=>root.querySelector(s);
+    const today=()=>{const d=new Date(); return new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));};
+    const parseDate=s=>{const [y,m,d]=s.split('-').map(Number); return new Date(Date.UTC(y,m-1,d));};
+    const fmt=s=>parseDate(s).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'});
+    let locations=['Kitchen Pantry','Garage Pantry','Backup Pantry','Refrigerator','Freezer'];
+    let shopping=[];
+    let dismissedLowStock=new Set();
+    const dismissedKey='pantrypilot-lowstock-saved-later-v1';
+    try{dismissedLowStock=new Set(JSON.parse(localStorage.getItem(dismissedKey)||'[]'));}catch(e){}
+    let items=[
+      {id:1,name:'Canned Green Beans',barcode:'041188041221',location:'Kitchen Pantry',qty:6,expiration:'2026-09-04',lowAt:2,notes:''},
+      {id:2,name:'Pasta Sauce',barcode:'',location:'Kitchen Pantry',qty:3,expiration:'2027-01-12',lowAt:2,notes:''},
+      {id:3,name:'Peanut Butter',barcode:'',location:'Garage Pantry',qty:2,expiration:'2026-08-27',lowAt:2,notes:''},
+      {id:4,name:'Chicken Broth',barcode:'',location:'Garage Pantry',qty:5,expiration:'2026-08-19',lowAt:2,notes:''},
+      {id:5,name:'Rice',barcode:'',location:'Backup Pantry',qty:4,expiration:'2027-07-15',lowAt:2,notes:''}
+    ];
+    const storageKey='pantrypilot-personal-v1';
+    let learnedProducts={};
+    function saveLocal(){try{localStorage.setItem(storageKey,JSON.stringify({appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items,learnedProducts}));}catch(e){}}
+    function loadLocal(){try{const raw=localStorage.getItem(storageKey);if(!raw)return;const data=JSON.parse(raw);if(Array.isArray(data.items))items=data.items;if(Array.isArray(data.locations)&&data.locations.length)locations=data.locations;if(Array.isArray(data.shopping))shopping=data.shopping;if(data.learnedProducts&&typeof data.learnedProducts==='object')learnedProducts=data.learnedProducts;if(data.appTitle)$('#appTitle').textContent=String(data.appTitle).slice(0,80);if(data.ownerLine)$('#ownerLine').textContent=String(data.ownerLine).slice(0,180);}catch(e){}}
+    const status=x=>{const days=Math.ceil((parseDate(x.expiration)-today())/86400000); if(days<0)return ['expired','Expired',days]; if(days<=30)return ['soon','Use soon',days]; return ['good','Good',days];};
+    function render(){
+      const q=$('#search').value.trim().toLowerCase(), lf=$('#locationFilter').value, sf=$('#statusFilter').value;
+      const locs=[...new Set([...locations,...items.map(x=>x.location)])].sort();
+      const old=lf; $('#locationFilter').innerHTML='<option value="all">All pantries</option>'+locs.map(x=>`<option>${escapeHtml(x)}</option>`).join(''); if(locs.includes(old)||old==='all') $('#locationFilter').value=old;
+      const filtered=items.filter(x=>{const st=status(x)[0]; return (!q||x.name.toLowerCase().includes(q)||x.location.toLowerCase().includes(q)||(x.barcode||'').toLowerCase().includes(q))&&(lf==='all'||x.location===lf)&&(sf==='all'||st===sf);});
+      $('#inventoryBody').innerHTML=filtered.map(x=>{const [cls,label]=status(x);const low=x.qty<=x.lowAt;return `<tr class="border-b border-slate-100"><td class="py-4 pr-3"><div class="font-bold">${escapeHtml(x.name)}</div>${x.notes?`<div class="text-xs text-slate-500">${escapeHtml(x.notes)}</div>`:''}</td><td class="py-4 pr-3 font-mono text-sm">${escapeHtml(x.barcode||'—')}</td><td class="py-4 pr-3">${escapeHtml(x.location)}</td><td class="py-4 pr-3"><span class="font-bold">${x.qty}</span>${low?'<div class="text-xs font-bold text-amber-700">LOW STOCK</div>':''}</td><td class="py-4 pr-3">${fmt(x.expiration)}</td><td class="py-4 pr-3"><span class="pill ${cls}">${label}</span></td><td class="py-4"><div class="flex flex-wrap gap-2"><button type="button" data-edit="${x.id}" class="min-h-11 px-3 rounded-lg border border-slate-300 text-sm font-bold">Edit</button><button type="button" data-shop="${x.id}" class="min-h-11 px-3 rounded-lg border border-slate-300 text-sm font-bold">Shop</button><button type="button" data-delete="${x.id}" class="min-h-11 px-3 rounded-lg border border-slate-300 text-sm font-bold">Remove</button></div></td></tr>`}).join('');
+      $('#emptyState').classList.toggle('hidden',filtered.length!==0);
+      $('#totalCount').textContent=items.reduce((a,x)=>a+x.qty,0); $('#soonCount').textContent=items.filter(x=>status(x)[0]==='soon').length; $('#expiredCount').textContent=items.filter(x=>status(x)[0]==='expired').length; $('#locationCount').textContent=locs.length;
+      const alerts=[...items].map(x=>({x,days:status(x)[2]})).filter(a=>a.days<=30).sort((a,b)=>a.days-b.days);
+      const expiredAlerts=alerts.filter(a=>a.days<0).length, weekAlerts=alerts.filter(a=>a.days>=0&&a.days<=7).length, monthAlerts=alerts.filter(a=>a.days>7&&a.days<=30).length;
+      $('#alertSummary').textContent=alerts.length?`${expiredAlerts} expired · ${weekAlerts} within 7 days · ${monthAlerts} within 30 days`:'All clear';
+      $('#alertList').innerHTML=alerts.length?alerts.map(({x,days})=>{const cls=days<0?'expired':'soon';const when=days<0?`${Math.abs(days)} day(s) overdue`:days===0?'Expires today':days===1?'Expires tomorrow':`Expires in ${days} days`;return `<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-slate-200 p-3"><div class="min-w-0"><div class="font-bold">${escapeHtml(x.name)}</div><div class="text-sm text-slate-500">${escapeHtml(x.location)} · Qty ${x.qty} · ${fmt(x.expiration)}</div></div><div class="flex flex-wrap items-center gap-2"><span class="pill ${cls} whitespace-nowrap">${when}</span><button type="button" data-remove-alert="${x.id}" class="min-h-11 px-3 rounded-lg border border-red-200 bg-white text-red-700 text-sm font-bold">Remove Item</button></div></div>`}).join(''):'<div class="rounded-xl bg-green-50 text-green-800 p-3 font-bold">Nothing expires in the next 30 days.</div>';
+      const urgent=[...items].sort((a,b)=>parseDate(a.expiration)-parseDate(b.expiration)).slice(0,4); $('#useFirst').innerHTML=urgent.length?urgent.map(x=>{const [cls,label,days]=status(x); const timing=days<0?`${Math.abs(days)} day(s) overdue`:days===0?'Expires today':`${days} day(s) left`; return `<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3"><div class="min-w-0"><div class="font-bold">${escapeHtml(x.name)}</div><div class="text-sm text-slate-500">${escapeHtml(x.location)} · Qty ${x.qty}</div></div><div class="flex flex-wrap items-center gap-2 sm:justify-end"><div class="text-right"><span class="pill ${cls}">${label}</span><div class="text-xs text-slate-500 mt-1">${timing}</div></div><button type="button" data-remove-usefirst="${x.id}" class="min-h-11 px-3 rounded-lg border border-red-200 bg-white text-red-700 text-sm font-bold">Remove Item</button></div></div>`}).join(''):'<p class="text-sm text-slate-500">No inventory items yet.</p>';
+      renderLocations(); renderShopping(); renderSavedLater();
+      saveLocal();
+    }
+    function renderLocations(){
+      $('#location').innerHTML=locations.map(x=>`<option>${escapeHtml(x)}</option>`).join('');
+      $('#locationList').innerHTML=locations.map(x=>`<span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2 text-sm font-bold">${escapeHtml(x)} <button type="button" data-remove-location="${escapeHtml(x)}" class="rounded-full px-1" aria-label="Remove ${escapeHtml(x)}">×</button></span>`).join('');
+    }
+    function renderShopping(){
+      const auto=items.filter(x=>x.qty<=x.lowAt&&!dismissedLowStock.has(x.id)).map(x=>({name:x.name,auto:true,itemId:x.id,qty:Math.max(1,(x.lowAt+1)-x.qty)}));
+      const combined=[...auto,...shopping];
+      $('#shoppingList').innerHTML=combined.length?combined.map((x,i)=>{
+        if(x.auto){
+          return `<div class="rounded-xl bg-amber-50 border border-amber-200 p-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div><span class="font-bold">${escapeHtml(x.name)}</span> <span class="text-xs text-amber-700 font-bold">LOW STOCK</span><div class="text-xs text-slate-500 mt-1">Suggested restock: ${x.qty}</div></div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" data-save-later="${x.itemId}" class="min-h-11 px-3 rounded-lg border border-slate-300 bg-white text-sm font-bold">Save for Later</button>
+                <button type="button" data-restock="${x.itemId}" class="min-h-11 px-3 rounded-lg border border-slate-300 bg-white text-sm font-bold">Mark Restocked</button>
+                <button type="button" data-remove-lowstock="${x.itemId}" class="min-h-11 px-3 rounded-lg border border-red-200 bg-white text-red-700 text-sm font-bold">Remove Item</button>
+              </div>
+            </div>
+          </div>`;
+        }
+        const manualIndex=i-auto.length;
+        const qty=Math.max(1,Number(x.qty)||1);
+        return `<div class="rounded-xl bg-slate-100 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="font-bold">${escapeHtml(x.name)}</span>
+            <div class="flex items-center gap-2">
+              <button type="button" data-shop-minus="${manualIndex}" class="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white font-black" aria-label="Decrease ${escapeHtml(x.name)} quantity">−</button>
+              <span class="min-w-8 text-center font-black">${qty}</span>
+              <button type="button" data-shop-plus="${manualIndex}" class="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white font-black" aria-label="Increase ${escapeHtml(x.name)} quantity">+</button>
+              <button type="button" data-remove-shop="${manualIndex}" class="min-h-11 px-3 rounded-lg bg-slate-900 text-white text-sm font-bold">Bought</button>
+            </div>
+          </div>
+        </div>`;
+      }).join(''):'<p class="text-sm text-slate-500">Nothing on the shopping list yet.</p>';
+    }
+    function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+    let editingId=null;
+    function resetItemForm(){editingId=null;$('#itemForm').reset();$('#quantity').value='1';$('#lowAt').value='1';$('#formTitle').textContent='Add Pantry Item';$('#saveItemBtn').textContent='Save Item';$('#cancelEditBtn').classList.add('hidden');$('#formMsg').textContent='';}
+    function renderSavedLater(){
+      const saved=[...dismissedLowStock].map(id=>items.find(x=>x.id===id)).filter(Boolean);
+      $('#savedLaterCount').textContent=saved.length?`${saved.length} saved`:'';
+      $('#savedLaterList').innerHTML=saved.length?saved.map(x=>`
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-3">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-bold">${escapeHtml(x.name)}</div>
+              <div class="text-sm text-slate-500">${escapeHtml(x.location)} · Qty ${x.qty} · Low at ${x.lowAt}</div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" data-return-shop="${x.id}" class="min-h-11 px-3 rounded-lg border border-slate-300 bg-white text-sm font-bold">Add to Shopping List</button>
+              <button type="button" data-remove-saved="${x.id}" class="min-h-11 px-3 rounded-lg border border-red-200 bg-white text-red-700 text-sm font-bold">Remove Item</button>
+            </div>
+          </div>
+        </div>`).join(''):'<p class="text-sm text-slate-500">Nothing saved for later.</p>';
+    }
+    function editItem(id){const x=items.find(v=>v.id===id);if(!x)return;editingId=id;$('#formTitle').textContent='Edit Pantry Item';$('#saveItemBtn').textContent='Update Item';$('#cancelEditBtn').classList.remove('hidden');$('#itemName').value=x.name;$('#barcode').value=x.barcode||'';$('#location').value=x.location;$('#quantity').value=x.qty;$('#expiration').value=x.expiration;$('#lowAt').value=x.lowAt;$('#notes').value=x.notes||'';$('#formCard').classList.remove('hidden');$('#itemName').focus();}
+    function downloadBackup(){const data={version:1,appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='PantryTrack-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0);}
+    function restoreBackup(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(String(reader.result||''));if(!Array.isArray(data.items)||!Array.isArray(data.locations))throw new Error('Invalid');items=data.items;locations=data.locations;shopping=Array.isArray(data.shopping)?data.shopping:[];if(data.appTitle)$('#appTitle').textContent=String(data.appTitle).slice(0,80);if(data.ownerLine)$('#ownerLine').textContent=String(data.ownerLine).slice(0,180);resetItemForm();render();}catch(e){alert('That file is not a valid PantryTrack backup.');}};reader.readAsText(file);}
+    let scannerStream=null,scannerTimer=null,barcodeDetector=null,zxingControls=null,scanCandidate='',scanCandidateCount=0,pendingScan='';
+    function normalizeBarcode(value){
+      const digits=String(value||'').replace(/\D/g,'');
+      if(digits.length===13&&digits.startsWith('0'))return digits.slice(1);
+      return digits;
+    }
+    function validBarcode(value){
+      const digits=normalizeBarcode(value);
+      if(![8,12,13].includes(digits.length))return false;
+      if(digits.length===8)return true;
+      const body=digits.slice(0,-1),expected=Number(digits.slice(-1));
+      let sum=0;
+      for(let i=body.length-1,pos=1;i>=0;i--,pos++)sum+=Number(body[i])*(pos%2===1?3:1);
+      return (10-(sum%10))%10===expected;
+    }
+    async function lookupProduct(code){
+      const barcode=normalizeBarcode(code);
+      if(!validBarcode(barcode))return;
+      if(learnedProducts[barcode]){
+        $('#itemName').value=learnedProducts[barcode];
+        $('#formMsg').className='text-sm mt-3 text-green-700';
+        $('#formMsg').textContent='Product recognized from your PantryPilot history.';
+        return;
+      }
+      $('#formMsg').className='text-sm mt-3 text-slate-600';
+      $('#formMsg').textContent='Looking up product…';
+      const candidates=[barcode];
+      if(barcode.length===12)candidates.push('0'+barcode);
+      if(barcode.length===13&&barcode.startsWith('0'))candidates.push(barcode.slice(1));
+      try{
+        let found=null;
+        for(const candidate of [...new Set(candidates)]){
+          const urls=[
+            'https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(candidate)+'.json?fields=product_name,brands',
+            'https://world.openfoodfacts.org/api/v0/product/'+encodeURIComponent(candidate)+'.json'
+          ];
+          for(const url of urls){
+            try{
+              const response=await fetch(url,{headers:{'Accept':'application/json'}});
+              if(!response.ok)continue;
+              const data=await response.json();
+              const product=data&&data.product?data.product:null;
+              const productName=product&&product.product_name?String(product.product_name).trim():'';
+              const brand=product&&product.brands?String(product.brands).split(',')[0].trim():'';
+              if(productName){found=brand&&!productName.toLowerCase().includes(brand.toLowerCase())?brand+' '+productName:productName;break;}
+            }catch(e){}
+          }
+          if(found)break;
+        }
+        if(found){
+          $('#itemName').value=found;
+          learnedProducts[barcode]=found;
+          saveLocal();
+          $('#formMsg').className='text-sm mt-3 text-green-700';
+          $('#formMsg').textContent='Product found. Check the name, then add expiration and location.';
+        }else{
+          $('#formMsg').className='text-sm mt-3 text-amber-700';
+          $('#formMsg').textContent='No online match found. Enter the item name once and PantryPilot will remember it for this barcode next time.';
+          $('#itemName').focus();
+        }
+      }catch(e){
+        $('#formMsg').className='text-sm mt-3 text-amber-700';
+        $('#formMsg').textContent='Product lookup is unavailable. Enter the item name once and PantryPilot will remember it for this barcode.';
+      }
+    }
+    function confirmScan(value,onConfirmed){
+      const code=normalizeBarcode(value);
+      if(!validBarcode(code))return false;
+      if(code===scanCandidate)scanCandidateCount++;else{scanCandidate=code;scanCandidateCount=1;}
+      $('#scannerMsg').textContent=scanCandidateCount<5?'Verifying barcode… hold steady.':'Barcode verified: '+code;
+      if(scanCandidateCount>=5){pendingScan=code;$('#scanReviewCode').textContent=code;$('#scanReview').classList.remove('hidden');$('#scannerMsg').textContent='Barcode detected. Confirm the number before using it.';onConfirmed();return true;}
+      return false;
+    }
+    async function startScanner(){
+      $('#scannerPanel').classList.remove('hidden');
+      $('#scannerMsg').textContent='Starting camera…';
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('#scannerMsg').textContent='Camera scanning is not supported in this browser. Enter the barcode manually.';return;}
+      try{
+        if('BarcodeDetector' in window){
+          const supported=await BarcodeDetector.getSupportedFormats();
+          const wanted=['upc_a','ean_13','ean_8'].filter(x=>supported.includes(x));
+          barcodeDetector=new BarcodeDetector({formats:wanted.length?wanted:supported});
+          scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+          $('#scannerVideo').srcObject=scannerStream; await $('#scannerVideo').play();
+          $('#scannerMsg').textContent='Scanning… hold the barcode steady inside the camera view.';
+          scanFrame();
+          return;
+        }
+        $('#scannerMsg').textContent='Loading mobile barcode scanner…';
+        const [mod,lib]=await Promise.all([
+          import('https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/+esm'),
+          import('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/+esm')
+        ]);
+        const hints=new Map();
+        hints.set(lib.DecodeHintType.POSSIBLE_FORMATS,[lib.BarcodeFormat.UPC_A,lib.BarcodeFormat.EAN_13,lib.BarcodeFormat.EAN_8]);
+        hints.set(lib.DecodeHintType.TRY_HARDER,true);
+        const reader=new mod.BrowserMultiFormatReader(hints);
+        zxingControls=await reader.decodeFromVideoDevice(undefined,$('#scannerVideo'),(result,error,controls)=>{
+          if(result){const value=String(result.getText?result.getText():result.text||'').trim();if(value)confirmScan(value,()=>{controls.stop();zxingControls=null;stopCameraOnly();});}
+        });
+        $('#scannerMsg').textContent='Scanning… hold the barcode steady inside the camera view.';
+      }catch(err){stopScanner();$('#scannerMsg').textContent='Camera access was unavailable. Check browser camera permission or enter the barcode manually.';}
+    }
+    async function scanFrame(){
+      if(!scannerStream||!barcodeDetector)return;
+      try{const codes=await barcodeDetector.detect($('#scannerVideo'));if(codes&&codes.length){const value=String(codes[0].rawValue||'').trim();if(value&&confirmScan(value,()=>stopCameraOnly()))return;}}catch(e){}
+      scannerTimer=setTimeout(scanFrame,200);
+    }
+    function stopCameraOnly(){if(scannerTimer){clearTimeout(scannerTimer);scannerTimer=null;}if(zxingControls){try{zxingControls.stop();}catch(e){}zxingControls=null;}if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null;}$('#scannerVideo').srcObject=null;barcodeDetector=null;scanCandidate='';scanCandidateCount=0;}
+    function stopScanner(){stopCameraOnly();pendingScan='';$('#scanReview').classList.add('hidden');$('#scannerPanel').classList.add('hidden');}
+    $('#customizeBtn').addEventListener('click',()=>{$('#customizeCard').classList.remove('hidden');$('#displayName').focus();});
+    $('#closeCustomize').addEventListener('click',()=>$('#customizeCard').classList.add('hidden'));
+    $('#customizeForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#displayName').value.trim();if(!name){$('#customizeMsg').textContent='Enter a family, person, household, organization, or pantry name.';return;}$('#appTitle').textContent=name+' PantryPilot';$('#ownerLine').textContent='Inventory for '+name+' — know what you have, where it is, and what needs to be used first.';$('#customizeMsg').textContent='Name updated.';$('#customizeCard').classList.add('hidden');});
+    $('#locationsBtn').addEventListener('click',()=>{$('#locationsCard').classList.remove('hidden');$('#newLocation').focus();});
+    $('#closeLocations').addEventListener('click',()=>$('#locationsCard').classList.add('hidden'));
+    $('#locationForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#newLocation').value.trim();if(!name)return;if(locations.some(x=>x.toLowerCase()===name.toLowerCase())){$('#locationMsg').textContent='That location already exists.';return;}locations.push(name);$('#newLocation').value='';$('#locationMsg').textContent='Location added.';render();});
+    $('#locationList').addEventListener('click',e=>{const b=e.target.closest('[data-remove-location]');if(!b)return;const name=b.dataset.removeLocation;if(items.some(x=>x.location===name)){ $('#locationMsg').textContent='Move or remove items from this location before deleting it.';return;}locations=locations.filter(x=>x!==name);render();});
+    $('#backupBtn').addEventListener('click',downloadBackup);
+    $('#restoreInput').addEventListener('change',e=>{restoreBackup(e.target.files&&e.target.files[0]);e.target.value='';});
+    $('#scanBarcodeBtn').addEventListener('click',startScanner);
+    $('#stopScannerBtn').addEventListener('click',stopScanner);
+    $('#useScannedCodeBtn').addEventListener('click',()=>{if(!pendingScan)return;const code=pendingScan;$('#barcode').value=code;$('#scannerMsg').textContent='Barcode added: '+code;pendingScan='';$('#scanReview').classList.add('hidden');$('#scannerPanel').classList.add('hidden');lookupProduct(code);$('#barcode').scrollIntoView({behavior:'smooth',block:'center'});});
+    $('#scanAgainBtn').addEventListener('click',()=>{stopCameraOnly();pendingScan='';$('#scanReview').classList.add('hidden');startScanner();});
+    $('#barcode').addEventListener('change',()=>{const code=$('#barcode').value.trim();if(code)lookupProduct(code);});
+    root.addEventListener('click',e=>{const b=e.target.closest('[data-expiry-days],[data-expiry-months],[data-expiry-years]');if(!b)return;const now=new Date(),d=new Date(Date.UTC(now.getFullYear(),now.getMonth(),now.getDate()));if(b.dataset.expiryDays)d.setUTCDate(d.getUTCDate()+Number(b.dataset.expiryDays));if(b.dataset.expiryMonths)d.setUTCMonth(d.getUTCMonth()+Number(b.dataset.expiryMonths));if(b.dataset.expiryYears)d.setUTCFullYear(d.getUTCFullYear()+Number(b.dataset.expiryYears));$('#expiration').value=d.toISOString().slice(0,10);});
+    $('#addBtn').addEventListener('click',()=>{resetItemForm();$('#formCard').classList.remove('hidden');$('#itemName').focus();});
+    $('#closeForm').addEventListener('click',()=>{stopScanner();resetItemForm();$('#formCard').classList.add('hidden');});
+    $('#cancelEditBtn').addEventListener('click',()=>{stopScanner();resetItemForm();$('#formCard').classList.add('hidden');});
+    $('#itemForm').addEventListener('submit',e=>{e.preventDefault(); const name=$('#itemName').value.trim(),barcode=$('#barcode').value.trim(),location=$('#location').value,qty=Number($('#quantity').value),expiration=$('#expiration').value,lowAt=Number($('#lowAt').value),notes=$('#notes').value.trim();if(!name||!location||!expiration||!Number.isFinite(qty)||qty<1||!Number.isFinite(lowAt)||lowAt<0){$('#formMsg').textContent='Please complete all required fields with valid quantities.';return;}if(barcode&&!/^[0-9A-Za-z-]{4,32}$/.test(barcode)){$('#formMsg').textContent='Barcode should contain 4–32 letters, numbers, or hyphens.';return;}const normalized=barcode?normalizeBarcode(barcode):'';if(normalized)learnedProducts[normalized]=name;const record={id:editingId||Date.now(),name,barcode:normalized||barcode,location,qty:Math.min(9999,Math.floor(qty)),expiration,lowAt:Math.min(9999,Math.floor(lowAt)),notes};if(editingId){items=items.map(x=>x.id===editingId?record:x);dismissedLowStock.delete(editingId);localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));}else{items.push(record);}resetItemForm();$('#formCard').classList.add('hidden');render();});
+    $('#inventoryBody').addEventListener('click',e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]'),shop=e.target.closest('[data-shop]');if(edit){editItem(Number(edit.dataset.edit));return;}if(del){items=items.filter(x=>x.id!==Number(del.dataset.delete));render();return;}if(shop){const item=items.find(x=>x.id===Number(shop.dataset.shop));if(item&&!shopping.some(x=>x.name.toLowerCase()===item.name.toLowerCase()))shopping.push({name:item.name,qty:1,auto:false});saveLocal();renderShopping();}});
+    function removeInventoryItem(id,source){
+      const item=items.find(x=>x.id===id);
+      if(!item)return;
+      items=items.filter(x=>x.id!==id);
+      shopping=shopping.filter(x=>x.name.toLowerCase()!==item.name.toLowerCase());
+      dismissedLowStock.delete(id);
+      render();
+      const msg=source==='alert'?'Removed from inventory and expiration alerts.':'Removed from inventory and Use First.';
+      if($('#shoppingMsg'))$('#shoppingMsg').textContent=msg;
+    }
+    $('#alertList').addEventListener('click',e=>{
+      const b=e.target.closest('[data-remove-alert]');
+      if(!b)return;
+      removeInventoryItem(Number(b.dataset.removeAlert),'alert');
+    });
+    $('#useFirst').addEventListener('click',e=>{
+      const b=e.target.closest('[data-remove-usefirst]');
+      if(!b)return;
+      removeInventoryItem(Number(b.dataset.removeUsefirst),'usefirst');
+    });
+
+    $('#shoppingForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const input=$('#shoppingInput');
+      const name=input.value.trim();
+      if(!name){$('#shoppingMsg').textContent='Type an item first.';input.focus();return;}
+      const existing=shopping.find(x=>x.name.toLowerCase()===name.toLowerCase());
+      if(existing){existing.qty=Math.min(99,(Number(existing.qty)||1)+1);$('#shoppingMsg').textContent=name+' quantity increased.';}
+      else{shopping.push({name,qty:1,auto:false});$('#shoppingMsg').textContent=name+' added to shopping list.';}
+      input.value='';
+      saveLocal();
+      renderShopping();
+      $('#shoppingList').scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
+    $('#shoppingList').addEventListener('click',e=>{
+      const bought=e.target.closest('[data-remove-shop]');
+      const plus=e.target.closest('[data-shop-plus]');
+      const minus=e.target.closest('[data-shop-minus]');
+      const restock=e.target.closest('[data-restock]');
+      const saveLater=e.target.closest('[data-save-later]');
+      const removeLow=e.target.closest('[data-remove-lowstock]');
+      if(bought){shopping.splice(Number(bought.dataset.removeShop),1);saveLocal();renderShopping();return;}
+      if(plus){const i=Number(plus.dataset.shopPlus);if(shopping[i])shopping[i].qty=Math.min(99,(Number(shopping[i].qty)||1)+1);saveLocal();renderShopping();return;}
+      if(minus){const i=Number(minus.dataset.shopMinus);if(shopping[i])shopping[i].qty=Math.max(1,(Number(shopping[i].qty)||1)-1);saveLocal();renderShopping();return;}
+      if(saveLater){
+        const id=Number(saveLater.dataset.saveLater);
+        const item=items.find(x=>x.id===id);
+        dismissedLowStock.add(id);
+        localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
+        $('#shoppingMsg').textContent=(item?item.name:'Item')+' saved for later. It stays in inventory but is hidden from the shopping list until that inventory item is changed.';
+        renderShopping();
+        renderSavedLater();
+        return;
+      }
+      if(removeLow){
+        const id=Number(removeLow.dataset.removeLowstock);
+        const item=items.find(x=>x.id===id);
+        if(item){
+          items=items.filter(x=>x.id!==id);
+          dismissedLowStock.delete(id);
+          localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
+          $('#shoppingMsg').textContent=item.name+' removed from inventory.';
+          render();
+        }
+        return;
+      }
+      if(restock){const id=Number(restock.dataset.restock);const item=items.find(x=>x.id===id);if(item){item.qty=Math.max(item.qty,item.lowAt+1);dismissedLowStock.delete(id);localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));$('#shoppingMsg').textContent=item.name+' marked restocked.';render();}return;}
+    });
+    $('#savedLaterList').addEventListener('click',e=>{
+      const back=e.target.closest('[data-return-shop]');
+      const remove=e.target.closest('[data-remove-saved]');
+      if(back){
+        const id=Number(back.dataset.returnShop);
+        const item=items.find(x=>x.id===id);
+        if(item){
+          dismissedLowStock.delete(id);
+          localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
+          $('#shoppingMsg').textContent=item.name+' moved back to the shopping list.';
+          renderShopping();
+          renderSavedLater();
+        }
+        return;
+      }
+      if(remove){
+        const id=Number(remove.dataset.removeSaved);
+        const item=items.find(x=>x.id===id);
+        if(item){
+          items=items.filter(x=>x.id!==id);
+          dismissedLowStock.delete(id);
+          localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
+          $('#shoppingMsg').textContent=item.name+' removed from inventory.';
+          render();
+        }
+      }
+    });
+    $('#clearShopping').addEventListener('click',()=>{
+      items.filter(x=>x.qty<=x.lowAt).forEach(x=>dismissedLowStock.add(x.id));
+      localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
+      shopping=[];
+      saveLocal();
+      renderShopping();
+      renderSavedLater();
+      $('#shoppingMsg').textContent='Shopping list cleared. Low-stock suggestions will return if inventory is updated and remains low.';
+    });
+    function updateNotificationButton(){
+      const btn=$('#notifyBtn');
+      if(!('Notification' in window)){btn.disabled=true;btn.textContent='Alerts Unavailable';$('#notifyMsg').textContent='This browser does not support notification alerts.';return;}
+      if(Notification.permission==='granted'){
+        btn.textContent='Alerts Enabled';
+        $('#notifyMsg').textContent='Alerts are enabled. PantryPilot will notify you when you open the app and something is expired or due within 7 days.';
+      }else if(Notification.permission==='denied'){
+        btn.textContent='Alerts Blocked';
+        $('#notifyMsg').textContent='Notifications are blocked in browser settings. The in-app Expiration Alerts list still works.';
+      }else{
+        btn.textContent='Enable Alerts';
+      }
+    }
+    function maybeNotifyExpirations(){
+      if(!('Notification' in window)||Notification.permission!=='granted')return;
+      const urgent=items.map(x=>({x,days:status(x)[2]})).filter(a=>a.days<=7).sort((a,b)=>a.days-b.days);
+      if(!urgent.length)return;
+      const dayKey=new Date().toISOString().slice(0,10);
+      if(localStorage.getItem('pantrypilot-last-expiration-notice')===dayKey)return;
+      const expired=urgent.filter(a=>a.days<0).length;
+      const due=urgent.filter(a=>a.days>=0).length;
+      const body=[expired?`${expired} expired`:null,due?`${due} due within 7 days`:null].filter(Boolean).join(' · ');
+      try{
+        new Notification('PantryPilot expiration alert',{body:body||'Items need your attention.'});
+        localStorage.setItem('pantrypilot-last-expiration-notice',dayKey);
+      }catch(e){}
+    }
+    $('#notifyBtn').addEventListener('click',async()=>{
+      if(!('Notification' in window))return;
+      if(Notification.permission==='default'){
+        try{await Notification.requestPermission();}catch(e){}
+      }
+      updateNotificationButton();
+      maybeNotifyExpirations();
+    });
+    updateNotificationButton();
+    setTimeout(maybeNotifyExpirations,800);
+    $('#search').addEventListener('input',render);$('#locationFilter').addEventListener('change',render);$('#statusFilter').addEventListener('change',render);loadLocal();render();
+  })();
+  </script>
+</div>
+<script>
+(() => {
+  const client = window.supabase.createClient('https://jaynklzklywxjbidjqmz.supabase.co', 'sb_publishable_1W2o5KwWkpBSEe6GG4Ywxg_imvmyg0');
+  const authShell=document.getElementById('authShell');
+  const app=document.getElementById('pantry-app');
+  const form=document.getElementById('authForm');
+  const email=document.getElementById('authEmail');
+  const password=document.getElementById('authPassword');
+  const submit=document.getElementById('authSubmit');
+  const msg=document.getElementById('authMsg');
+  let mode='signin';
+  function setMode(m){mode=m;submit.textContent=m==='signup'?'Create Account':'Sign In';password.autocomplete=m==='signup'?'new-password':'current-password';msg.textContent='';}
+  document.getElementById('showSignIn').onclick=()=>setMode('signin');
+  document.getElementById('showSignUp').onclick=()=>setMode('signup');
+  form.addEventListener('submit',async e=>{e.preventDefault();msg.textContent=mode==='signup'?'Creating account…':'Signing in…';
+    if(mode==='signup'){const {data,error}=await client.auth.signUp({email:email.value.trim(),password:password.value,options:{emailRedirectTo:window.location.origin}});if(error){msg.textContent=error.message;return;}msg.textContent=data.session?'Account created.':'Check your email to confirm your account, then return here to sign in.';}
+    else {const {error}=await client.auth.signInWithPassword({email:email.value.trim(),password:password.value});if(error){msg.textContent=error.message;return;}}
+  });
+  document.getElementById('magicLinkBtn').onclick=async()=>{if(!email.value.trim()){msg.textContent='Enter your email address first.';return;}msg.textContent='Sending magic link…';const {error}=await client.auth.signInWithOtp({email:email.value.trim(),options:{emailRedirectTo:window.location.origin}});msg.textContent=error?error.message:'Magic link sent. Check your email.';};
+  function addSignOut(){if(document.getElementById('cloudSignOut'))return;const b=document.createElement('button');b.id='cloudSignOut';b.type='button';b.textContent='Sign Out';b.className='min-h-11 px-4 rounded-xl border border-slate-300 bg-white font-bold';b.onclick=()=>client.auth.signOut();const add=[...app.querySelectorAll('button')].find(x=>x.textContent.trim()==='+ Add Item');if(add&&add.parentElement)add.parentElement.appendChild(b);else app.prepend(b);}
+  function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut();}else{app.classList.add('hidden');authShell.classList.remove('hidden');}}
+  client.auth.onAuthStateChange((_event,session)=>show(session));
+  client.auth.getSession().then(({data})=>show(data.session));
+})();
+</script></body></html>
