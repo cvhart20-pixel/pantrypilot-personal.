@@ -215,7 +215,11 @@
     ];
     const storageKey='pantrypilot-personal-v1';
     let learnedProducts={};
-    function saveLocal(){try{localStorage.setItem(storageKey,JSON.stringify({appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items,learnedProducts}));}catch(e){}}
+    function saveLocal()
+    {try{localStorage.setItem(storageKey,JSON.stringify({appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items,learnedProducts}));}catch(e){}}
+    async function getCloudHousehold(){const {data,error}=await window.supabaseClient.from('household_members').select('household_id').limit(1).single();if(error){console.error('Household lookup:',error);return null;}return data.household_id;}
+    window.getCloudHousehold=getCloudHousehold;
+    async function loadCloudItems(){const householdId=await getCloudHousehold();if(!householdId)return false;const {data,error}=await window.supabaseClient.from('pantry_items').select('id,name,barcode,location,quantity,low_stock_at,expiration_date,notes').eq('household_id',householdId).order('created_at');if(error){console.error('Cloud pantry load:',error);return false;}if(!data||!data.length)return false;items=data.map((r,i)=>({id:i+1,cloudId:r.id,name:r.name||'',barcode:r.barcode||'',location:r.location||'',qty:r.quantity??1,expiration:r.expiration_date||'',lowAt:r.low_stock_at??2,notes:r.notes||''}));render();return true;}
     function loadLocal(){try{const raw=localStorage.getItem(storageKey);if(!raw)return;const data=JSON.parse(raw);if(Array.isArray(data.items))items=data.items;if(Array.isArray(data.locations)&&data.locations.length)locations=data.locations;if(Array.isArray(data.shopping))shopping=data.shopping;if(data.learnedProducts&&typeof data.learnedProducts==='object')learnedProducts=data.learnedProducts;if(data.appTitle)$('#appTitle').textContent=String(data.appTitle).slice(0,80);if(data.ownerLine)$('#ownerLine').textContent=String(data.ownerLine).slice(0,180);}catch(e){}}
     const status=x=>{const days=Math.ceil((parseDate(x.expiration)-today())/86400000); if(days<0)return ['expired','Expired',days]; if(days<=30)return ['soon','Use soon',days]; return ['good','Good',days];};
     function render(){
@@ -570,6 +574,7 @@
 <script>
 (() => {
   const client = window.supabase.createClient('https://jaynklzklywxjbidjqmz.supabase.co', 'sb_publishable_14zpFA2B0LXBwTwIWgsytQ_VGOw9s_B');
+  window.supabaseClient=client;
   const authShell=document.getElementById('authShell');
   const app=document.getElementById('pantry-app');
   const form=document.getElementById('authForm');
@@ -587,7 +592,7 @@
   });
   document.getElementById('magicLinkBtn').onclick=async()=>{if(!email.value.trim()){msg.textContent='Enter your email address first.';return;}msg.textContent='Sending magic link…';const {error}=await client.auth.signInWithOtp({email:email.value.trim(),options:{emailRedirectTo:window.location.href}});msg.textContent=error?error.message:'Magic link sent. Check your email.';};
   function addSignOut(){if(document.getElementById('cloudSignOut'))return;const b=document.createElement('button');b.id='cloudSignOut';b.type='button';b.textContent='Sign Out';b.className='min-h-11 px-4 rounded-xl border border-slate-300 bg-white font-bold';b.onclick=()=>client.auth.signOut();const add=[...app.querySelectorAll('button')].find(x=>x.textContent.trim()==='+ Add Item');if(add&&add.parentElement)add.parentElement.appendChild(b);else app.prepend(b);}
-  function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut();}else{app.classList.add('hidden');authShell.classList.remove('hidden');}}
+  async function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut();}else{app.classList.add('hidden');authShell.classList.remove('hidden');}}
   client.auth.onAuthStateChange((_event,session)=>show(session));
   client.auth.getSession().then(({data})=>show(data.session));
 })();
