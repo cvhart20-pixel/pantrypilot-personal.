@@ -592,7 +592,7 @@
   });
   document.getElementById('magicLinkBtn').onclick=async()=>{if(!email.value.trim()){msg.textContent='Enter your email address first.';return;}msg.textContent='Sending magic link…';const {error}=await client.auth.signInWithOtp({email:email.value.trim(),options:{emailRedirectTo:window.location.href}});msg.textContent=error?error.message:'Magic link sent. Check your email.';};
   function addSignOut(){if(document.getElementById('cloudSignOut'))return;const b=document.createElement('button');b.id='cloudSignOut';b.type='button';b.textContent='Sign Out';b.className='min-h-11 px-4 rounded-xl border border-slate-300 bg-white font-bold';b.onclick=()=>client.auth.signOut();const add=[...app.querySelectorAll('button')].find(x=>x.textContent.trim()==='+ Add Item');if(add&&add.parentElement)add.parentElement.appendChild(b);else app.prepend(b);}
-  async function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut();}else{app.classList.add('hidden');authShell.classList.remove('hidden');}}
+  async function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut();}else{app.classList.add('hidden');authShell.classList.remove('hidden');}} if(session&&window.loadCloudItems)await window.loadCloudItems();
   client.auth.onAuthStateChange((_event,session)=>show(session));
   client.auth.getSession().then(({data})=>show(data.session));
 })();
