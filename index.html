@@ -460,6 +460,31 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     $('#closeForm').addEventListener('click',()=>{stopScanner();resetItemForm();$('#formCard').classList.add('hidden');});
     $('#cancelEditBtn').addEventListener('click',()=>{stopScanner();resetItemForm();$('#formCard').classList.add('hidden');});
     $('#itemForm').addEventListener('submit',e=>{e.preventDefault(); const name=$('#itemName').value.trim(),barcode=$('#barcode').value.trim(),location=$('#location').value,qty=Number($('#quantity').value),expiration=$('#expiration').value,lowAt=Number($('#lowAt').value),notes=$('#notes').value.trim();if(!name||!location||!expiration||!Number.isFinite(qty)||qty<1||!Number.isFinite(lowAt)||lowAt<0){$('#formMsg').textContent='Please complete all required fields with valid quantities.';return;}if(barcode&&!/^[0-9A-Za-z-]{4,32}$/.test(barcode)){$('#formMsg').textContent='Barcode should contain 4–32 letters, numbers, or hyphens.';return;}const normalized=barcode?normalizeBarcode(barcode):'';if(normalized)learnedProducts[normalized]=name;const record={id:editingId||Date.now(),name,barcode:normalized||barcode,location,qty:Math.min(9999,Math.floor(qty)),expiration,lowAt:Math.min(9999,Math.floor(lowAt)),notes};if(editingId){items=items.map(x=>x.id===editingId?record:x);dismissedLowStock.delete(editingId);localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));}else{items.push(record);}resetItemForm();$('#formCard').classList.add('hidden');render();});
+    async function saveNewestItemToCloud(){
+  if(!window.supabaseClient)return;
+  const householdId=await getCloudHousehold();
+  if(!householdId)return;
+
+  const {data:{user}}=await window.supabaseClient.auth.getUser();
+  if(!user)return;
+
+  const x=items[items.length-1];
+  if(!x)return;
+
+  const {error}=await window.supabaseClient.from('pantry_items').insert({
+    household_id:householdId,
+    name:x.name||'',
+    barcode:x.barcode||null,
+    location:x.location||null,
+    quantity:x.qty??1,
+    low_stock_at:x.lowAt??1,
+    expiration_date:x.expiration||null,
+    notes:x.notes||null,
+    created_by:user.id
+  });
+
+  if(error)console.error('Cloud item save failed:',error);
+}
     $('#inventoryBody').addEventListener('click',e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]'),shop=e.target.closest('[data-shop]');if(edit){editItem(Number(edit.dataset.edit));return;}if(del){items=items.filter(x=>x.id!==Number(del.dataset.delete));render();return;}if(shop){const item=items.find(x=>x.id===Number(shop.dataset.shop));if(item&&!shopping.some(x=>x.name.toLowerCase()===item.name.toLowerCase()))shopping.push({name:item.name,qty:1,auto:false});saveLocal();renderShopping();}});
     function removeInventoryItem(id,source){
       const item=items.find(x=>x.id===id);
