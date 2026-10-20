@@ -15,6 +15,9 @@
       <button id="authSubmit" type="submit" class="w-full min-h-11 rounded-xl bg-slate-900 text-white font-bold">Sign In</button>
     </form>
     <button id="magicLinkBtn" type="button" class="w-full min-h-11 mt-3 rounded-xl border border-slate-300 bg-white font-bold">Email Me a Magic Link</button>
+    
+<button id="forgotPasswordBtn" type="button" class="w-full min-h-11 mt-3 rounded-xl border border-slate-300 bg-white font-bold">Forgot Password?</button>
+
     <div id="authMsg" class="mt-4 text-sm font-bold text-slate-600" aria-live="polite"></div>
   </div>
 </div>
@@ -651,6 +654,46 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     else {const {error}=await client.auth.signInWithPassword({email:email.value.trim(),password:password.value});if(error){msg.textContent=error.message;return;}}
   });
   document.getElementById('magicLinkBtn').onclick=async()=>{if(!email.value.trim()){msg.textContent='Enter your email address first.';return;}msg.textContent='Sending magic link…';const {error}=await client.auth.signInWithOtp({email:email.value.trim(),options:{emailRedirectTo:window.location.href}});msg.textContent=error?error.message:'Magic link sent. Check your email.';};
+  
+document.getElementById('forgotPasswordBtn').onclick = async () => {
+  const address = email.value.trim();
+  if (!address) {
+    msg.textContent = 'Enter your email address first.';
+    return;
+  }
+  msg.textContent = 'Sending password reset email...';
+  const { error } = await client.auth.resetPasswordForEmail(address, {
+    redirectTo: 'https://cvhart20-pixel.github.io/pantrypilot-personal/'
+  });
+  msg.textContent = error
+    ? error.message
+    : 'Check your email for a password reset link.';
+};
+
+client.auth.onAuthStateChange((event, session) => {
+  if (event !== 'PASSWORD_RECOVERY') return;
+
+  setTimeout(async () => {
+    const newPassword = prompt('Enter your NEW Pantry Pilot password (at least 8 characters):');
+    if (newPassword === null) return;
+
+    if (newPassword.length < 8) {
+      alert('Password must be at least 8 characters. Please open the recovery link again.');
+      return;
+    }
+
+    const { error } = await client.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      alert('Password reset failed: ' + error.message);
+    } else {
+      alert('Password updated! You can now sign in with your new password.');
+    }
+  }, 0);
+});
+
   function addSignOut(){if(document.getElementById('cloudSignOut'))return;const b=document.createElement('button');b.id='cloudSignOut';b.type='button';b.textContent='Sign Out';b.className='min-h-11 px-4 rounded-xl border border-slate-300 bg-white font-bold';b.onclick=()=>client.auth.signOut();const add=[...app.querySelectorAll('button')].find(x=>x.textContent.trim()==='+ Add Item');if(add&&add.parentElement)add.parentElement.appendChild(b);else app.prepend(b);}
   async function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut()
     if(window.migrateLocalItemsToCloud)await window.migrateLocalItemsToCloud();
