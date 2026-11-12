@@ -32,7 +32,7 @@
   <div class="max-w-6xl mx-auto space-y-5">
     <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
       <div>
-        <div class="text-sm font-bold tracking-[.18em] uppercase text-slate-500">Inventory + Expiration Manager · v19</div>
+        <div class="text-sm font-bold tracking-[.18em] uppercase text-slate-500">Inventory + Expiration Manager · v20 camera fix</div>
         <h2 id="appTitle" class="text-3xl sm:text-4xl font-black mt-1">PantryPilot Personal</h2>
         <p id="ownerLine" class="text-slate-600 mt-2 max-w-2xl">Your personal pantry inventory — know what you have, where it is, and what needs to be used first.</p>
       </div>
@@ -124,7 +124,7 @@
       </form>
       <div id="scannerPanel" class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <div class="flex items-center justify-between gap-3 mb-3"><div><div class="font-black">Scan Barcode</div><p class="text-sm text-slate-500">Point your phone camera at a UPC or EAN barcode.</p></div><button id="stopScannerBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Stop</button></div>
-        <video id="scannerVideo" playsinline muted class="w-full max-h-[340px] rounded-xl bg-black object-cover"></video>
+        <video id="scannerVideo" autoplay playsinline webkit-playsinline muted class="w-full rounded-xl bg-black object-contain" style="display:block;width:100%;height:280px;max-height:45vh"></video>
         <div id="scannerMsg" class="text-sm mt-3 text-slate-600" aria-live="polite">Camera is off.</div>
         <div id="scanReview" class="hidden mt-3 rounded-xl border border-slate-300 bg-white p-3">
           <div class="text-sm text-slate-500">Detected barcode</div>
@@ -334,7 +334,7 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     function editItem(id){const x=items.find(v=>v.id===id);if(!x)return;editingId=id;$('#formTitle').textContent='Edit Pantry Item';$('#saveItemBtn').textContent='Update Item';$('#cancelEditBtn').classList.remove('hidden');$('#itemName').value=x.name;$('#barcode').value=x.barcode||'';$('#location').value=x.location;$('#quantity').value=x.qty;$('#expiration').value=x.expiration;$('#lowAt').value=x.lowAt;$('#notes').value=x.notes||'';$('#formCard').classList.remove('hidden');$('#itemName').focus();}
     function downloadBackup(){const data={version:1,appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='PantryTrack-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0);}
     function restoreBackup(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(String(reader.result||''));if(!Array.isArray(data.items)||!Array.isArray(data.locations))throw new Error('Invalid');items=data.items;locations=data.locations;shopping=Array.isArray(data.shopping)?data.shopping:[];if(data.appTitle)$('#appTitle').textContent=String(data.appTitle).slice(0,80);if(data.ownerLine)$('#ownerLine').textContent=String(data.ownerLine).slice(0,180);resetItemForm();render();}catch(e){alert('That file is not a valid PantryTrack backup.');}};reader.readAsText(file);}
-    let scannerStream=null,scannerTimer=null,barcodeDetector=null,zxingControls=null,scanCandidate='',scanCandidateCount=0,pendingScan='';
+    let scannerStream=null,scannerTimer=null,barcodeDetector=null,zxingControls=null,scanCandidate='',scanCandidateCount=0,pendingScan='',scannerRun=0;
     function normalizeBarcode(value){
       const digits=String(value||'').replace(/\D/g,'');
       if(digits.length===13&&digits.startsWith('0'))return digits.slice(1);
@@ -408,41 +408,62 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
       return false;
     }
     async function startScanner(){
+      stopCameraOnly();
+      const run=scannerRun;
+      const video=$('#scannerVideo');
       $('#scannerPanel').classList.remove('hidden');
-      $('#scannerMsg').textContent='Starting camera…';
-      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('#scannerMsg').textContent='Camera scanning is not supported in this browser. Enter the barcode manually.';return;}
+      $('#scanReview').classList.add('hidden');
+      pendingScan='';
+      $('#scannerMsg').textContent='Starting rear camera…';
+      $('#scannerPanel').scrollIntoView({block:'center',behavior:'smooth'});
+      if(!navigator.mediaDevices?.getUserMedia){$('#scannerMsg').textContent='Camera unavailable. Open this site in Safari over HTTPS or enter the barcode manually.';return;}
       try{
+        const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+        if(run!==scannerRun){stream.getTracks().forEach(t=>t.stop());return;}
+        scannerStream=stream;
+        video.muted=true;video.defaultMuted=true;video.playsInline=true;
+        video.setAttribute('playsinline','');video.setAttribute('webkit-playsinline','');
+        video.srcObject=stream;
+        await video.play();
+        if(run!==scannerRun)return;
+        $('#scannerMsg').textContent='Camera ready. Loading barcode reader…';
         if('BarcodeDetector' in window){
-          const supported=await BarcodeDetector.getSupportedFormats();
-          const wanted=['upc_a','ean_13','ean_8'].filter(x=>supported.includes(x));
-          barcodeDetector=new BarcodeDetector({formats:wanted.length?wanted:supported});
-          scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-          $('#scannerVideo').srcObject=scannerStream; await $('#scannerVideo').play();
-          $('#scannerMsg').textContent='Scanning… hold the barcode steady inside the camera view.';
-          scanFrame();
-          return;
+          try{
+            const supported=await BarcodeDetector.getSupportedFormats();
+            if(run!==scannerRun)return;
+            const wanted=['upc_a','ean_13','ean_8'].filter(x=>supported.includes(x));
+            if(wanted.length){barcodeDetector=new BarcodeDetector({formats:wanted});$('#scannerMsg').textContent='Scanning… hold the barcode steady.';scanFrame(run);return;}
+          }catch(e){console.warn('Native barcode reader unavailable',e);}
         }
-        $('#scannerMsg').textContent='Loading mobile barcode scanner…';
         const [mod,lib]=await Promise.all([
-          import('https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/+esm'),
+          import('https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm'),
           import('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/+esm')
         ]);
+        if(run!==scannerRun)return;
         const hints=new Map();
         hints.set(lib.DecodeHintType.POSSIBLE_FORMATS,[lib.BarcodeFormat.UPC_A,lib.BarcodeFormat.EAN_13,lib.BarcodeFormat.EAN_8]);
         hints.set(lib.DecodeHintType.TRY_HARDER,true);
         const reader=new mod.BrowserMultiFormatReader(hints);
-        zxingControls=await reader.decodeFromVideoDevice(undefined,$('#scannerVideo'),(result,error,controls)=>{
-          if(result){const value=String(result.getText?result.getText():result.text||'').trim();if(value)confirmScan(value,()=>{controls.stop();zxingControls=null;stopCameraOnly();});}
+        const controls=await reader.decodeFromStream(stream,video,(result,error,controls)=>{
+          if(run!==scannerRun)return;
+          if(result){const value=String(result.getText()).trim();if(value)confirmScan(value,()=>{controls.stop();stopCameraOnly();});}
         });
+        if(run!==scannerRun){controls.stop();return;}
+        zxingControls=controls;
         $('#scannerMsg').textContent='Scanning… hold the barcode steady inside the camera view.';
-      }catch(err){stopScanner();$('#scannerMsg').textContent='Camera access was unavailable. Check browser camera permission or enter the barcode manually.';}
+      }catch(err){
+        if(run!==scannerRun)return;
+        console.error('Scanner error:',err);
+        stopCameraOnly();
+        $('#scannerMsg').textContent='Scanner could not start ('+(err.name||'error')+'). Check camera permission, reload, or enter the barcode manually.';
+      }
     }
-    async function scanFrame(){
-      if(!scannerStream||!barcodeDetector)return;
-      try{const codes=await barcodeDetector.detect($('#scannerVideo'));if(codes&&codes.length){const value=String(codes[0].rawValue||'').trim();if(value&&confirmScan(value,()=>stopCameraOnly()))return;}}catch(e){}
-      scannerTimer=setTimeout(scanFrame,200);
+    async function scanFrame(run){
+      if(run!==scannerRun||!scannerStream||!barcodeDetector)return;
+      try{const codes=await barcodeDetector.detect($('#scannerVideo'));if(run!==scannerRun)return;if(codes&&codes.length){const value=String(codes[0].rawValue||'').trim();if(value&&confirmScan(value,()=>stopCameraOnly()))return;}}catch(e){}
+      if(run===scannerRun)scannerTimer=setTimeout(()=>scanFrame(run),200);
     }
-    function stopCameraOnly(){if(scannerTimer){clearTimeout(scannerTimer);scannerTimer=null;}if(zxingControls){try{zxingControls.stop();}catch(e){}zxingControls=null;}if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null;}$('#scannerVideo').srcObject=null;barcodeDetector=null;scanCandidate='';scanCandidateCount=0;}
+    function stopCameraOnly(){scannerRun++;if(scannerTimer){clearTimeout(scannerTimer);scannerTimer=null;}if(zxingControls){try{zxingControls.stop();}catch(e){}zxingControls=null;}if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null;}const video=$('#scannerVideo');video.pause();video.srcObject=null;barcodeDetector=null;scanCandidate='';scanCandidateCount=0;}
     function stopScanner(){stopCameraOnly();pendingScan='';$('#scanReview').classList.add('hidden');$('#scannerPanel').classList.add('hidden');}
     $('#customizeBtn').addEventListener('click',()=>{$('#customizeCard').classList.remove('hidden');$('#displayName').focus();});
     $('#closeCustomize').addEventListener('click',()=>$('#customizeCard').classList.add('hidden'));
