@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f8fafc"><title>PantryPilot Personal</title><script src="https://cdn.tailwindcss.com"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head><body class="m-0 bg-slate-50">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f8fafc"><title>Pantrivana</title><script src="https://cdn.tailwindcss.com"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head><body class="m-0 bg-slate-50">
 <div id="authShell" class="min-h-screen flex items-center justify-center p-6 bg-slate-50">
   <div class="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-xl">
-    <div class="text-xs font-black tracking-[.18em] uppercase text-slate-500">PantryPilot Cloud</div>
-    <h1 class="text-3xl font-black text-slate-900 mt-2">Your pantry, synced.</h1>
+    <div class="text-xs font-black tracking-[.18em] uppercase text-slate-500">Pantrivana</div>
+    <h1 class="text-3xl font-black text-slate-900 mt-2">Your pantry. Your peace of mind.</h1>
     <p class="text-slate-600 mt-2">Sign in to access your pantry, or create a new account.</p>
     <div class="grid grid-cols-2 gap-2 mt-5">
       <button id="showSignIn" type="button" class="min-h-11 rounded-xl bg-slate-900 text-white font-bold">Sign In</button>
@@ -32,18 +32,18 @@
   <div class="max-w-6xl mx-auto space-y-5">
     <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
       <div>
-        <div class="text-sm font-bold tracking-[.18em] uppercase text-slate-500">Inventory + Expiration Manager · v20 camera fix</div>
-        <h2 id="appTitle" class="text-3xl sm:text-4xl font-black mt-1">PantryPilot Personal</h2>
-        <p id="ownerLine" class="text-slate-600 mt-2 max-w-2xl">Your personal pantry inventory — know what you have, where it is, and what needs to be used first.</p>
+        <div class="text-sm font-bold tracking-[.18em] uppercase text-slate-500">Inventory + Expiration Manager · Cloud sync</div>
+        <h2 id="appTitle" class="text-3xl sm:text-4xl font-black mt-1">Pantrivana</h2>
+        <p id="ownerLine" class="text-slate-600 mt-2 max-w-2xl">Your pantry. Your peace of mind.</p>
       </div>
       <div class="flex flex-wrap gap-2">
         <button id="backupBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Save Backup</button>
-        <label class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold inline-flex items-center cursor-pointer">Restore Backup<input id="restoreInput" type="file" accept="application/json,.json" class="sr-only"></label>
+        <label class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold inline-flex items-center cursor-pointer">Recover Phone Backup<input id="restoreInput" type="file" accept="application/json,.json" class="sr-only"></label>
         <button id="locationsBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Manage Locations</button>
         <button id="customizeBtn" type="button" class="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold">Customize Name</button>
         <button id="addBtn" type="button" class="min-h-11 rounded-xl bg-slate-900 text-white px-5 font-bold">+ Add Item</button>
       </div>
-    </header>
+    </header><div class="card p-3"><button id="syncNow" type="button" class="font-bold text-blue-700">Refresh Cloud Inventory</button><p id="cloudStatus" aria-live="polite">Waiting for cloud connection.</p></div>
 
     <section id="customizeCard" class="card p-4 sm:p-5 hidden">
       <div class="flex justify-between items-center gap-3 mb-4">
@@ -219,46 +219,26 @@
     const storageKey='pantrypilot-personal-v1';
     let learnedProducts={};
     function saveLocal()
-    {try{localStorage.setItem(storageKey,JSON.stringify({appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items,learnedProducts}));}catch(e){}}
-    async function getCloudHousehold(){const {data,error}=await window.supabaseClient.from('household_members').select('household_id').limit(1).single();if(error){console.error('Household lookup:',error);return null;}return data.household_id;}
-    window.getCloudHousehold=getCloudHousehold;
-    async function loadCloudItems(){const householdId=await getCloudHousehold();if(!householdId)return false;const {data,error}=await window.supabaseClient.from('pantry_items').select('id,name,barcode,location,quantity,low_stock_at,expiration_date,notes').eq('household_id',householdId).order('created_at');if(error){console.error('Cloud pantry load:',error);return false;}if(!data||!data.length)return false;items=data.map((r,i)=>({id:i+1,cloudId:r.id,name:r.name||'',barcode:r.barcode||'',location:r.location||'',qty:r.quantity??1,expiration:r.expiration_date||'',lowAt:r.low_stock_at??2,notes:r.notes||''}));render();return true;}
-    async function migrateLocalItemsToCloud(){
-  const householdId=await getCloudHousehold();
-  if(!householdId||!window.supabaseClient)return false;
-
-  const {data:{user},error:userError}=await window.supabaseClient.auth.getUser();
-  if(userError||!user){console.error('User lookup failed:',userError);return false;}
-
-  const {data:existing,error:checkError}=await window.supabaseClient
-    .from('pantry_items')
-    .select('id')
-    .eq('household_id',householdId)
-    .limit(1);
-
-  if(checkError){console.error('Cloud check failed:',checkError);return false;}
-  if(existing&&existing.length){console.log('Cloud pantry already has items. Migration skipped.');return false;}
-
-  const rows=items.map(x=>({
-    household_id:householdId,
-    name:x.name||'',
-    barcode:x.barcode||null,
-    location:x.location||null,
-    quantity:x.qty??1,
-    low_stock_at:x.lowAt??1,
-    expiration_date:x.expiration||null,
-    notes:x.notes||null,
-    created_by:user.id
-  }));
-
-  const {error}=await window.supabaseClient.from('pantry_items').insert(rows);
-  if(error){console.error('Pantry migration failed:',error);return false;}
-
-  console.log('Pantry migration complete.');
-  return true;
-}
-window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
-    function loadLocal(){try{const raw=localStorage.getItem(storageKey);if(!raw)return;const data=JSON.parse(raw);if(Array.isArray(data.items))items=data.items;if(Array.isArray(data.locations)&&data.locations.length)locations=data.locations;if(Array.isArray(data.shopping))shopping=data.shopping;if(data.learnedProducts&&typeof data.learnedProducts==='object')learnedProducts=data.learnedProducts;if(data.appTitle)$('#appTitle').textContent=String(data.appTitle).slice(0,80);if(data.ownerLine)$('#ownerLine').textContent=String(data.ownerLine).slice(0,180);}catch(e){}}
+    {if(!cloudReady)return;try{localStorage.setItem(storageKey,JSON.stringify({appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items,learnedProducts}));}catch(e){}}
+    let cloudBusy=false, cloudReady=false, cloudUser=null, household=null;
+    const cloudMessage=t=>$('#cloudStatus').textContent=t;
+    const fields=x=>({name:x.name,barcode:x.barcode||null,location:x.location||null,quantity:x.qty,low_stock_at:x.lowAt,expiration_date:x.expiration||null,notes:x.notes||null});
+    const signature=x=>JSON.stringify(fields(x));
+    async function context(){
+      const c=window.supabaseClient; const {data:{user},error}=await c.auth.getUser(); if(error||!user)throw Error('Sign in required');
+      const r=await c.from('household_members').select('household_id').eq('user_id',user.id).limit(2); if(r.error)throw r.error;
+      if(r.data.length!==1)throw Error('Exactly one household membership is required');
+      cloudUser=user.id; household=r.data[0].household_id; return c;
+    }
+    async function fetchRows(c){let all=[];for(let start=0;;start+=500){const r=await c.from('pantry_items').select('id,name,barcode,location,quantity,low_stock_at,expiration_date,notes').eq('household_id',household).order('id').range(start,start+499);if(r.error)throw r.error;all.push(...r.data);if(r.data.length<500)break;}return all.map(r=>({id:r.id,cloudId:r.id,name:r.name||'',barcode:r.barcode||'',location:r.location||'',qty:r.quantity??1,expiration:r.expiration_date||'',lowAt:r.low_stock_at??1,notes:r.notes||''}));}
+    async function runCloud(fn){if(cloudBusy)return false;cloudBusy=true;try{await fn(await context());return true;}catch(e){cloudMessage('Cloud error: '+(e.message||String(e)));alert('Cloud operation failed: '+(e.message||String(e)));return false;}finally{cloudBusy=false;}}
+    function applyRows(rows){items=rows;locations=[...new Set([...locations,...rows.map(x=>x.location).filter(Boolean)])];cloudReady=true;render();cloudMessage('Cloud inventory loaded: '+rows.length+' records.');}
+    window.loadCloudItems=()=>runCloud(async c=>{const rows=await fetchRows(c);const old=localStorage.getItem(storageKey);if(old&&!localStorage.getItem(storageKey+'-before-cloud'))localStorage.setItem(storageKey+'-before-cloud',old);applyRows(rows);});
+    async function writeItem(record){return runCloud(async c=>{if(!cloudReady)throw Error('Load cloud inventory first');let q=record.cloudId?c.from('pantry_items').update(fields(record)).eq('household_id',household).eq('id',record.cloudId):c.from('pantry_items').insert({...fields(record),household_id:household,created_by:cloudUser});const r=await q.select('id').single();if(r.error)throw r.error;record.id=record.cloudId=r.data.id;items=items.filter(x=>x.id!==record.id);items.push(record);render();cloudMessage('Saved to cloud.');});}
+    async function deleteItem(id){return runCloud(async c=>{if(!cloudReady)throw Error('Load cloud inventory first');const x=items.find(v=>v.id===id);if(!x?.cloudId)throw Error('Item is not synced');const r=await c.from('pantry_items').delete().eq('household_id',household).eq('id',x.cloudId).select('id').single();if(r.error)throw r.error;items=items.filter(v=>v.id!==id);dismissedLowStock.delete(id);render();cloudMessage('Removed from cloud.');});}
+    async function recover(file){if(!file)return;let data;try{data=JSON.parse(await file.text());if(!Array.isArray(data.items)||!data.items.every(x=>typeof x.name==='string'&&typeof x.location==='string'&&Number.isInteger(x.qty)&&x.qty>0&&Number.isInteger(x.lowAt)&&x.lowAt>=0&&/^\d{4}-\d{2}-\d{2}$/.test(x.expiration)))throw Error('Invalid backup');}catch(e){alert(e.message);return;}
+      await runCloud(async c=>{const rows=await fetchRows(c);const used=new Set();const missing=[];const conflicts=[];for(const x of data.items){const exact=rows.find(r=>!used.has(r.id)&&signature(r)===signature(x));if(exact){used.add(exact.id);continue;}if(rows.some(r=>r.id===x.cloudId||(r.location===x.location&&((x.barcode&&r.barcode===x.barcode)||r.name.toLowerCase()===x.name.toLowerCase())))){conflicts.push(x.name);continue;}missing.push(x);}if(!confirm('Backup: '+data.items.length+' records. Add '+missing.length+' missing records? '+conflicts.length+' possible conflicts will be skipped. No cloud records will be deleted or overwritten.'+(conflicts.length?'\nSkipped: '+conflicts.join(', '):'')))return;if(missing.length){const r=await c.from('pantry_items').insert(missing.map(x=>({...fields(x),household_id:household,created_by:cloudUser}))).select('id');if(r.error)throw r.error;if(r.data.length!==missing.length)throw Error('Unexpected insert count; refresh before retrying');}applyRows(await fetchRows(c));cloudMessage('Recovery complete. '+missing.length+' added; '+conflicts.length+' conflicts skipped.');});}
+    function loadLocal(){try{const raw=localStorage.getItem(storageKey);if(!raw)return;const data=JSON.parse(raw);if(Array.isArray(data.items))items=data.items;if(Array.isArray(data.locations)&&data.locations.length)locations=data.locations;if(Array.isArray(data.shopping))shopping=data.shopping;if(data.learnedProducts&&typeof data.learnedProducts==='object')learnedProducts=data.learnedProducts;if(data.appTitle&&!/PantryPilot Personal/.test(data.appTitle))$('#appTitle').textContent=String(data.appTitle).slice(0,80);}catch(e){}}
     const status=x=>{const days=Math.ceil((parseDate(x.expiration)-today())/86400000); if(days<0)return ['expired','Expired',days]; if(days<=30)return ['soon','Use soon',days]; return ['good','Good',days];};
     function render(){
       const q=$('#search').value.trim().toLowerCase(), lf=$('#locationFilter').value, sf=$('#statusFilter').value;
@@ -333,7 +313,7 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     }
     function editItem(id){const x=items.find(v=>v.id===id);if(!x)return;editingId=id;$('#formTitle').textContent='Edit Pantry Item';$('#saveItemBtn').textContent='Update Item';$('#cancelEditBtn').classList.remove('hidden');$('#itemName').value=x.name;$('#barcode').value=x.barcode||'';$('#location').value=x.location;$('#quantity').value=x.qty;$('#expiration').value=x.expiration;$('#lowAt').value=x.lowAt;$('#notes').value=x.notes||'';$('#formCard').classList.remove('hidden');$('#itemName').focus();}
     function downloadBackup(){const data={version:1,appTitle:$('#appTitle').textContent,ownerLine:$('#ownerLine').textContent,locations,shopping,items};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='PantryTrack-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0);}
-    function restoreBackup(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(String(reader.result||''));if(!Array.isArray(data.items)||!Array.isArray(data.locations))throw new Error('Invalid');items=data.items;locations=data.locations;shopping=Array.isArray(data.shopping)?data.shopping:[];if(data.appTitle)$('#appTitle').textContent=String(data.appTitle).slice(0,80);if(data.ownerLine)$('#ownerLine').textContent=String(data.ownerLine).slice(0,180);resetItemForm();render();}catch(e){alert('That file is not a valid PantryTrack backup.');}};reader.readAsText(file);}
+    function restoreBackup(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(String(reader.result||''));if(!Array.isArray(data.items)||!Array.isArray(data.locations))throw new Error('Invalid');items=data.items;locations=data.locations;shopping=Array.isArray(data.shopping)?data.shopping:[];if(data.appTitle&&!/PantryPilot Personal/.test(data.appTitle))$('#appTitle').textContent=String(data.appTitle).slice(0,80);resetItemForm();render();}catch(e){alert('That file is not a valid PantryTrack backup.');}};reader.readAsText(file);}
     let scannerStream=null,scannerTimer=null,barcodeDetector=null,zxingControls=null,scanCandidate='',scanCandidateCount=0,pendingScan='',scannerRun=0;
     function normalizeBarcode(value){
       const digits=String(value||'').replace(/\D/g,'');
@@ -472,8 +452,9 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     $('#closeLocations').addEventListener('click',()=>$('#locationsCard').classList.add('hidden'));
     $('#locationForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#newLocation').value.trim();if(!name)return;if(locations.some(x=>x.toLowerCase()===name.toLowerCase())){$('#locationMsg').textContent='That location already exists.';return;}locations.push(name);$('#newLocation').value='';$('#locationMsg').textContent='Location added.';render();});
     $('#locationList').addEventListener('click',e=>{const b=e.target.closest('[data-remove-location]');if(!b)return;const name=b.dataset.removeLocation;if(items.some(x=>x.location===name)){ $('#locationMsg').textContent='Move or remove items from this location before deleting it.';return;}locations=locations.filter(x=>x!==name);render();});
+    $('#syncNow').addEventListener('click',()=>window.loadCloudItems());
     $('#backupBtn').addEventListener('click',downloadBackup);
-    $('#restoreInput').addEventListener('change',e=>{restoreBackup(e.target.files&&e.target.files[0]);e.target.value='';});
+    $('#restoreInput').addEventListener('change',e=>{recover(e.target.files&&e.target.files[0]);e.target.value='';});
     $('#scanBarcodeBtn').addEventListener('click',startScanner);
     $('#stopScannerBtn').addEventListener('click',stopScanner);
     $('#useScannedCodeBtn').addEventListener('click',()=>{if(!pendingScan)return;const code=pendingScan;$('#barcode').value=code;$('#scannerMsg').textContent='Barcode added: '+code;pendingScan='';$('#scanReview').classList.add('hidden');$('#scannerPanel').classList.add('hidden');lookupProduct(code);$('#barcode').scrollIntoView({behavior:'smooth',block:'center'});});
@@ -483,52 +464,18 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     $('#addBtn').addEventListener('click',()=>{resetItemForm();$('#formCard').classList.remove('hidden');$('#itemName').focus();});
     $('#closeForm').addEventListener('click',()=>{stopScanner();resetItemForm();$('#formCard').classList.add('hidden');});
     $('#cancelEditBtn').addEventListener('click',()=>{stopScanner();resetItemForm();$('#formCard').classList.add('hidden');});
-    $('#itemForm').addEventListener('submit',e=>{e.preventDefault(); const name=$('#itemName').value.trim(),barcode=$('#barcode').value.trim(),location=$('#location').value,qty=Number($('#quantity').value),expiration=$('#expiration').value,lowAt=Number($('#lowAt').value),notes=$('#notes').value.trim();if(!name||!location||!expiration||!Number.isFinite(qty)||qty<1||!Number.isFinite(lowAt)||lowAt<0){$('#formMsg').textContent='Please complete all required fields with valid quantities.';return;}if(barcode&&!/^[0-9A-Za-z-]{4,32}$/.test(barcode)){$('#formMsg').textContent='Barcode should contain 4–32 letters, numbers, or hyphens.';return;}const normalized=barcode?normalizeBarcode(barcode):'';if(normalized)learnedProducts[normalized]=name;const record={id:editingId||Date.now(),name,barcode:normalized||barcode,location,qty:Math.min(9999,Math.floor(qty)),expiration,lowAt:Math.min(9999,Math.floor(lowAt)),notes};if(editingId){items=items.map(x=>x.id===editingId?record:x);dismissedLowStock.delete(editingId);localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));}else{items.push(record);}resetItemForm();$('#formCard').classList.add('hidden');render();});
-    async function saveNewestItemToCloud(){
-  if(!window.supabaseClient)return;
-  const householdId=await getCloudHousehold();
-  if(!householdId)return;
-
-  const {data:{user}}=await window.supabaseClient.auth.getUser();
-  if(!user)return;
-
-  const x=items[items.length-1];
-  if(!x)return;
-
-  const {error}=await window.supabaseClient.from('pantry_items').insert({
-    household_id:householdId,
-    name:x.name||'',
-    barcode:x.barcode||null,
-    location:x.location||null,
-    quantity:x.qty??1,
-    low_stock_at:x.lowAt??1,
-    expiration_date:x.expiration||null,
-    notes:x.notes||null,
-    created_by:user.id
-  });
-
-  if(error)console.error('Cloud item save failed:',error);
-}
-    $('#inventoryBody').addEventListener('click',e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]'),shop=e.target.closest('[data-shop]');if(edit){editItem(Number(edit.dataset.edit));return;}if(del){items=items.filter(x=>x.id!==Number(del.dataset.delete));render();return;}if(shop){const item=items.find(x=>x.id===Number(shop.dataset.shop));if(item&&!shopping.some(x=>x.name.toLowerCase()===item.name.toLowerCase()))shopping.push({name:item.name,qty:1,auto:false});saveLocal();renderShopping();}});
-    function removeInventoryItem(id,source){
-      const item=items.find(x=>x.id===id);
-      if(!item)return;
-      items=items.filter(x=>x.id!==id);
-      shopping=shopping.filter(x=>x.name.toLowerCase()!==item.name.toLowerCase());
-      dismissedLowStock.delete(id);
-      render();
-      const msg=source==='alert'?'Removed from inventory and expiration alerts.':'Removed from inventory and Use First.';
-      if($('#shoppingMsg'))$('#shoppingMsg').textContent=msg;
-    }
+    $('#itemForm').addEventListener('submit',async e=>{e.preventDefault(); const name=$('#itemName').value.trim(),barcode=$('#barcode').value.trim(),location=$('#location').value,qty=Number($('#quantity').value),expiration=$('#expiration').value,lowAt=Number($('#lowAt').value),notes=$('#notes').value.trim();if(!name||!location||!expiration||!Number.isFinite(qty)||qty<1||!Number.isFinite(lowAt)||lowAt<0){$('#formMsg').textContent='Please complete all required fields with valid quantities.';return;}if(barcode&&!/^[0-9A-Za-z-]{4,32}$/.test(barcode)){$('#formMsg').textContent='Barcode should contain 4–32 letters, numbers, or hyphens.';return;}const normalized=barcode?normalizeBarcode(barcode):'';if(normalized)learnedProducts[normalized]=name;const record={id:editingId||Date.now(),name,barcode:normalized||barcode,location,qty:Math.min(9999,Math.floor(qty)),expiration,lowAt:Math.min(9999,Math.floor(lowAt)),notes};if(editingId)record.cloudId=items.find(x=>x.id===editingId)?.cloudId;if(await writeItem(record)){resetItemForm();$('#formCard').classList.add('hidden');}});
+    $('#inventoryBody').addEventListener('click',e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]'),shop=e.target.closest('[data-shop]');if(edit){editItem(edit.dataset.edit);return;}if(del){deleteItem(del.dataset.delete);return;}if(shop){const item=items.find(x=>x.id===shop.dataset.shop);if(item&&!shopping.some(x=>x.name.toLowerCase()===item.name.toLowerCase()))shopping.push({name:item.name,qty:1,auto:false});saveLocal();renderShopping();}});
+    function removeInventoryItem(id,source){deleteItem(id);}
     $('#alertList').addEventListener('click',e=>{
       const b=e.target.closest('[data-remove-alert]');
       if(!b)return;
-      removeInventoryItem(Number(b.dataset.removeAlert),'alert');
+      removeInventoryItem(b.dataset.removeAlert,'alert');
     });
     $('#useFirst').addEventListener('click',e=>{
       const b=e.target.closest('[data-remove-usefirst]');
       if(!b)return;
-      removeInventoryItem(Number(b.dataset.removeUsefirst),'usefirst');
+      removeInventoryItem(b.dataset.removeUsefirst,'usefirst');
     });
 
     $('#shoppingForm').addEventListener('submit',e=>{
@@ -555,7 +502,7 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
       if(plus){const i=Number(plus.dataset.shopPlus);if(shopping[i])shopping[i].qty=Math.min(99,(Number(shopping[i].qty)||1)+1);saveLocal();renderShopping();return;}
       if(minus){const i=Number(minus.dataset.shopMinus);if(shopping[i])shopping[i].qty=Math.max(1,(Number(shopping[i].qty)||1)-1);saveLocal();renderShopping();return;}
       if(saveLater){
-        const id=Number(saveLater.dataset.saveLater);
+        const id=saveLater.dataset.saveLater;
         const item=items.find(x=>x.id===id);
         dismissedLowStock.add(id);
         localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
@@ -565,10 +512,11 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
         return;
       }
       if(removeLow){
-        const id=Number(removeLow.dataset.removeLowstock);
+        const id=removeLow.dataset.removeLowstock;
         const item=items.find(x=>x.id===id);
         if(item){
-          items=items.filter(x=>x.id!==id);
+          deleteItem(id);
+          return;
           dismissedLowStock.delete(id);
           localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
           $('#shoppingMsg').textContent=item.name+' removed from inventory.';
@@ -576,13 +524,13 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
         }
         return;
       }
-      if(restock){const id=Number(restock.dataset.restock);const item=items.find(x=>x.id===id);if(item){item.qty=Math.max(item.qty,item.lowAt+1);dismissedLowStock.delete(id);localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));$('#shoppingMsg').textContent=item.name+' marked restocked.';render();}return;}
+      if(restock){const id=restock.dataset.restock;const item=items.find(x=>x.id===id);if(item){writeItem({...item,qty:Math.max(item.qty,item.lowAt+1)});return;dismissedLowStock.delete(id);localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));$('#shoppingMsg').textContent=item.name+' marked restocked.';render();}return;}
     });
     $('#savedLaterList').addEventListener('click',e=>{
       const back=e.target.closest('[data-return-shop]');
       const remove=e.target.closest('[data-remove-saved]');
       if(back){
-        const id=Number(back.dataset.returnShop);
+        const id=back.dataset.returnShop;
         const item=items.find(x=>x.id===id);
         if(item){
           dismissedLowStock.delete(id);
@@ -594,10 +542,11 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
         return;
       }
       if(remove){
-        const id=Number(remove.dataset.removeSaved);
+        const id=remove.dataset.removeSaved;
         const item=items.find(x=>x.id===id);
         if(item){
-          items=items.filter(x=>x.id!==id);
+          deleteItem(id);
+          return;
           dismissedLowStock.delete(id);
           localStorage.setItem(dismissedKey,JSON.stringify([...dismissedLowStock]));
           $('#shoppingMsg').textContent=item.name+' removed from inventory.';
@@ -651,7 +600,7 @@ window.migrateLocalItemsToCloud=migrateLocalItemsToCloud;
     });
     updateNotificationButton();
     setTimeout(maybeNotifyExpirations,800);
-    $('#search').addEventListener('input',render);$('#locationFilter').addEventListener('change',render);$('#statusFilter').addEventListener('change',render);loadLocal();render();
+    $('#search').addEventListener('input',render);$('#locationFilter').addEventListener('change',render);$('#statusFilter').addEventListener('change',render);loadLocal();try{const old=localStorage.getItem(storageKey);if(old&&!localStorage.getItem(storageKey+'-before-cloud'))localStorage.setItem(storageKey+'-before-cloud',old);}catch(e){}items=[];render();
   })();
   </script>
 </div>
@@ -684,7 +633,7 @@ document.getElementById('forgotPasswordBtn').onclick = async () => {
   }
   msg.textContent = 'Sending password reset email...';
   const { error } = await client.auth.resetPasswordForEmail(address, {
-    redirectTo: 'https://cvhart20-pixel.github.io/pantrypilot-personal/'
+    redirectTo: window.location.origin
   });
   msg.textContent = error
     ? error.message
@@ -715,12 +664,10 @@ client.auth.onAuthStateChange((event, session) => {
   }, 0);
 });
 
-  function addSignOut(){if(document.getElementById('cloudSignOut'))return;const b=document.createElement('button');b.id='cloudSignOut';b.type='button';b.textContent='Sign Out';b.className='min-h-11 px-4 rounded-xl border border-slate-300 bg-white font-bold';b.onclick=()=>client.auth.signOut();const add=[...app.querySelectorAll('button')].find(x=>x.textContent.trim()==='+ Add Item');if(add&&add.parentElement)add.parentElement.appendChild(b);else app.prepend(b);}
-  async function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut()
-    if(window.migrateLocalItemsToCloud)await window.migrateLocalItemsToCloud();
-if(window.loadCloudItems)await window.loadCloudItems();;}else{app.classList.add('hidden');authShell.classList.remove('hidden');}}
-  
-  client.auth.onAuthStateChange((_event,session)=>show(session));
-  client.auth.getSession().then(({data})=>show(data.session));
+  function addSignOut(){if(document.getElementById('cloudSignOut'))return;const b=document.createElement('button');b.id='cloudSignOut';b.type='button';b.textContent='Sign Out';b.className='min-h-11 px-4 rounded-xl border border-slate-300 bg-white font-bold';b.onclick=async()=>{await client.auth.signOut();location.reload();};const add=[...app.querySelectorAll('button')].find(x=>x.textContent.trim()==='+ Add Item');if(add&&add.parentElement)add.parentElement.appendChild(b);else app.prepend(b);}
+  let activeUser=null;
+  function show(session){if(session){authShell.classList.add('hidden');app.classList.remove('hidden');addSignOut();if(activeUser!==session.user.id){activeUser=session.user.id;window.loadCloudItems();}}else{activeUser=null;app.classList.add('hidden');authShell.classList.remove('hidden');}}
+  client.auth.onAuthStateChange((_event,session)=>setTimeout(()=>show(session),0));
+
 })();
 </script></body></html>
